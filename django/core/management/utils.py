@@ -10,22 +10,24 @@ from django.utils.encoding import DEFAULT_LOCALE_ENCODING, force_text
 from .base import CommandError
 
 
-def popen_wrapper(args, os_err_exc_type=CommandError, stdout_encoding='utf-8'):
+def popen_wrapper(args, os_err_exc_type=CommandError):
     """
     Friendly wrapper around Popen.
 
     Returns stdout output, stderr output and OS status code.
     """
     try:
-        p = Popen(args, shell=False, stdout=PIPE, stderr=PIPE, close_fds=os.name != 'nt')
+        p = Popen(args, shell=False, stdout=PIPE, stderr=PIPE,
+                close_fds=os.name != 'nt', universal_newlines=True)
     except OSError as e:
-        strerror = force_text(e.strerror, DEFAULT_LOCALE_ENCODING, strings_only=True)
+        strerror = force_text(e.strerror, DEFAULT_LOCALE_ENCODING,
+                              strings_only=True)
         six.reraise(os_err_exc_type, os_err_exc_type('Error executing %s: %s' %
                     (args[0], strerror)), sys.exc_info()[2])
     output, errors = p.communicate()
     return (
-        force_text(output, stdout_encoding, strings_only=True, errors='strict'),
-        force_text(errors, DEFAULT_LOCALE_ENCODING, strings_only=True, errors='replace'),
+        output,
+        force_text(errors, DEFAULT_LOCALE_ENCODING, strings_only=True),
         p.returncode
     )
 

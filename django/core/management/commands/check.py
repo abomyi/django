@@ -20,16 +20,6 @@ class Command(BaseCommand):
             help='List available tags.')
         parser.add_argument('--deploy', action='store_true', dest='deploy',
             help='Check deployment settings.')
-        parser.add_argument(
-            '--fail-level',
-            default='ERROR',
-            choices=['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'],
-            dest='fail_level',
-            help=(
-                'Message level that will cause the command to exit with a '
-                'non-zero status. Default is ERROR.'
-            ),
-        )
 
     def handle(self, *app_labels, **options):
         include_deployment_checks = options['deploy']
@@ -42,7 +32,7 @@ class Command(BaseCommand):
         else:
             app_configs = None
 
-        tags = options.get('tags')
+        tags = options.get('tags', None)
         if tags:
             try:
                 invalid_tag = next(
@@ -59,5 +49,4 @@ class Command(BaseCommand):
             tags=tags,
             display_num_errors=True,
             include_deployment_checks=include_deployment_checks,
-            fail_level=getattr(checks, options['fail_level']),
         )

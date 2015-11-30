@@ -20,7 +20,7 @@ from django.db import models
 from django.utils import six
 from django.utils.encoding import force_text
 from django.utils.http import urlencode
-from django.utils.translation import ugettext
+from django.utils.translation import ugettext, ugettext_lazy
 
 # Changelist settings
 ALL_VAR = 'all'
@@ -32,6 +32,9 @@ ERROR_FLAG = 'e'
 
 IGNORED_PARAMS = (
     ALL_VAR, ORDER_VAR, ORDER_TYPE_VAR, SEARCH_VAR, IS_POPUP_VAR, TO_FIELD_VAR)
+
+# Text to display within change-list table cells if the value is blank.
+EMPTY_CHANGELIST_VALUE = ugettext_lazy('(None)')
 
 
 class ChangeList(object):
@@ -174,8 +177,14 @@ class ChangeList(object):
         result_count = paginator.count
 
         # Get the total number of objects, with no admin filters applied.
+        # Perform a slight optimization:
+        # full_result_count is equal to paginator.count if no filters
+        # were applied
         if self.model_admin.show_full_result_count:
-            full_result_count = self.root_queryset.count()
+            if self.get_filters_params() or self.params.get(SEARCH_VAR):
+                full_result_count = self.root_queryset.count()
+            else:
+                full_result_count = result_count
         else:
             full_result_count = None
         can_show_all = result_count <= self.list_max_show_all
@@ -374,7 +383,7 @@ class ChangeList(object):
             except FieldDoesNotExist:
                 pass
             else:
-                if isinstance(field.remote_field, models.ManyToOneRel):
+                if isinstance(field.rel, models.ManyToOneRel):
                     return True
         return False
 

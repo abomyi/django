@@ -180,13 +180,6 @@ class BaseExpression(object):
                 return True
         return False
 
-    @cached_property
-    def contains_column_references(self):
-        for expr in self.get_source_expressions():
-            if expr and expr.contains_column_references:
-                return True
-        return False
-
     def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
         """
         Provides the chance to do any preprocessing or validation before being
@@ -346,17 +339,6 @@ class BaseExpression(object):
     def reverse_ordering(self):
         return self
 
-    def flatten(self):
-        """
-        Recursively yield this expression and all subexpressions, in
-        depth-first order.
-        """
-        yield self
-        for expr in self.get_source_expressions():
-            if expr:
-                for inner_expr in expr.flatten():
-                    yield inner_expr
-
 
 class Expression(BaseExpression, Combinable):
     """
@@ -482,18 +464,8 @@ class Func(Expression):
     function = None
     template = '%(function)s(%(expressions)s)'
     arg_joiner = ', '
-    arity = None  # The number of arguments the function accepts.
 
     def __init__(self, *expressions, **extra):
-        if self.arity is not None and len(expressions) != self.arity:
-            raise TypeError(
-                "'%s' takes exactly %s %s (%s given)" % (
-                    self.__class__.__name__,
-                    self.arity,
-                    "argument" if self.arity == 1 else "arguments",
-                    len(expressions),
-                )
-            )
         output_field = extra.pop('output_field', None)
         super(Func, self).__init__(output_field=output_field)
         self.source_expressions = self._parse_expressions(*expressions)
@@ -534,15 +506,6 @@ class Func(Expression):
         self.extra['expressions'] = self.extra['field'] = self.arg_joiner.join(sql_parts)
         template = template or self.extra.get('template', self.template)
         return template % self.extra, params
-
-    def as_sqlite(self, *args, **kwargs):
-        sql, params = self.as_sql(*args, **kwargs)
-        try:
-            if self.output_field.get_internal_type() == 'DecimalField':
-                sql = 'CAST(%s AS NUMERIC)' % sql
-        except FieldError:
-            pass
-        return sql, params
 
     def copy(self):
         copy = super(Func, self).copy()
@@ -621,14 +584,6 @@ class RawSQL(Expression):
         return [self]
 
 
-class Star(Expression):
-    def __repr__(self):
-        return "'*'"
-
-    def as_sql(self, compiler, connection):
-        return '*', []
-
-
 class Random(Expression):
     def __init__(self):
         super(Random, self).__init__(output_field=fields.FloatField())
@@ -641,9 +596,6 @@ class Random(Expression):
 
 
 class Col(Expression):
-
-    contains_column_references = True
-
     def __init__(self, alias, target, output_field=None):
         if output_field is None:
             output_field = target
@@ -828,11 +780,6 @@ class Case(Expression):
         c.default = c.default.resolve_expression(query, allow_joins, reuse, summarize, for_save)
         return c
 
-    def copy(self):
-        c = super(Case, self).copy()
-        c.cases = c.cases[:]
-        return c
-
     def as_sql(self, compiler, connection, template=None, extra=None):
         connection.ops.check_expression_support(self)
         if not self.cases:
@@ -982,10 +929,8 @@ class OrderBy(BaseExpression):
     def as_sql(self, compiler, connection):
         connection.ops.check_expression_support(self)
         expression_sql, params = compiler.compile(self.expression)
-        placeholders = {
-            'expression': expression_sql,
-            'ordering': 'DESC' if self.descending else 'ASC',
-        }
+        placeholders = {'expression': expression_sql}
+        placeholders['ordering'] = 'DESC' if self.descending else 'ASC'
         return (self.template % placeholders).rstrip(), params
 
     def get_group_by_cols(self):
